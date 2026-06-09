@@ -12,7 +12,6 @@ import urllib.request
 
 HOME = os.path.expanduser("~")
 HOOKS = os.path.join(HOME, ".claude", "hooks")
-LOG = os.path.join(HOOKS, "tts.log")
 sys.path.insert(0, HOOKS)
 import tts_engine  # noqa: E402  (speech layer: say | xtts; also resolves language)
 
@@ -61,14 +60,6 @@ PROMPTS = {
 }
 
 
-def log(msg):
-    try:
-        with open(LOG, "a") as f:
-            f.write(msg + "\n")
-    except Exception:
-        pass
-
-
 def last_assistant_text(transcript_path):
     """Return the text of the last assistant message that contains a text block."""
     text = None
@@ -90,8 +81,8 @@ def last_assistant_text(transcript_path):
                 joined = "\n".join(p for p in parts if p).strip()
                 if joined:
                     text = joined
-    except Exception as e:
-        log(f"error reading transcript: {e}")
+    except Exception:
+        pass
     return text
 
 
@@ -204,7 +195,6 @@ def main():
         return
     tp = data.get("transcript_path")
     if not tp or not os.path.exists(tp):
-        log("no transcript_path")
         return
 
     text = last_assistant_text(tp)
@@ -213,15 +203,13 @@ def main():
 
     try:
         summary = summarize(clean_for_llm(text))
-    except Exception as e:
-        log(f"ollama error: {e}")
+    except Exception:
         return
 
     summary = clean_for_speech(summary)
     if not summary:
         return
 
-    log(f"SPEAKING ({backend()}->{tts_engine.engine()}/{tts_engine.language()}): {summary}")
     tts_engine.speak(summary)
 
 

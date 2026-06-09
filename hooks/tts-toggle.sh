@@ -55,7 +55,7 @@ case "$ACTION" in
       *)  MSG="JARVIS online. Esse e o motor de voz configurado agora, rodando localmente no seu Mac." ;;
     esac
     ~/.claude/hooks/tts-venv/bin/python "$HOME/.claude/hooks/tts_engine.py" "$MSG" \
-      2>>"$HOME/.claude/hooks/tts.log" &
+      2>/dev/null &
     echo "Playing test clip (engine: $(get_cfg ENGINE), language: $(get_cfg LANG))."
     exit 0 ;;
   *) echo "usage: on|off|status|test|engine <say|xtts>|language <pt|en|es>|summary <ollama|local|openai|gemini|anthropic>|model <id>|device <cpu|mps>"; exit 1 ;;

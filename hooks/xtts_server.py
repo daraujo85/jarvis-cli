@@ -43,13 +43,16 @@ def load_model():
 
 def synth_and_play(text, lang):
     wav = tempfile.mktemp(suffix=".wav")
-    tts.tts_to_file(text=text, speaker=SPEAKER, language=lang, file_path=wav)
-    subprocess.run(["killall", "afplay"], stderr=subprocess.DEVNULL)  # interrupt previous audio
-    subprocess.run(["afplay", wav])
     try:
-        os.remove(wav)
-    except OSError:
-        pass
+        tts.tts_to_file(text=text, speaker=SPEAKER, language=lang, file_path=wav)
+        subprocess.run(["killall", "afplay"], stderr=subprocess.DEVNULL)  # interrupt previous audio
+        subprocess.run(["afplay", wav])
+    finally:
+        # always delete the temp WAV so audio never piles up on disk
+        try:
+            os.remove(wav)
+        except OSError:
+            pass
 
 
 class Handler(BaseHTTPRequestHandler):
