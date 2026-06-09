@@ -104,15 +104,17 @@ The installer copies the hooks into `~/.claude/`, registers the `Stop` hook in `
 
 ## 🎮 Usage
 
-Control is through the **`/tts` command**, and state is **per session** (each terminal toggles its own — it won't leak to other sessions):
+Control is through the **`/jarvis` command** (with `/tts` kept as an alias), and state is **per session** (each terminal toggles its own — it won't leak to other sessions):
 
 | Command | Action |
 |---|---|
-| `/tts on` / `off` | enable/disable **in this session** |
-| `/tts status` | show state + current engine |
-| `/tts test` | play a test clip |
-| `/tts engine say` | use the native macOS voice |
-| `/tts engine xtts` | use the neural voice (local server) |
+| `/jarvis on` / `off` | enable/disable **in this session** |
+| `/jarvis status` | show state + current engine |
+| `/jarvis test` | play a test clip |
+| `/jarvis engine say` | use the native macOS voice |
+| `/jarvis engine xtts` | use the neural voice (local server) |
+
+> `/tts` is a built-in alias for `/jarvis` — same behavior, type whichever you prefer.
 
 ---
 
