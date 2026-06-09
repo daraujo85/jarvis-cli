@@ -200,9 +200,7 @@ def main():
         return
     # PER-SESSION state: only speak if ~/.claude/tts-enabled-<session_id> exists
     sid = data.get("session_id") or os.environ.get("CLAUDE_CODE_SESSION_ID") or "default"
-    flag = os.path.join(HOME, ".claude", f"tts-enabled-{sid}")
-    log(f"HOOK FIRED sid={sid} env_sid={os.environ.get('CLAUDE_CODE_SESSION_ID')} flag_exists={os.path.exists(flag)}")
-    if not os.path.exists(flag):
+    if not os.path.exists(os.path.join(HOME, ".claude", f"tts-enabled-{sid}")):
         return
     tp = data.get("transcript_path")
     if not tp or not os.path.exists(tp):
