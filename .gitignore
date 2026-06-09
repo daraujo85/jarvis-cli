@@ -1,0 +1,6 @@
+# venv e modelos sao criados/baixados na maquina do usuario
+hooks/tts-venv/
+*.log
+__pycache__/
+*.pyc
+.DS_Store
