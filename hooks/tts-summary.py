@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Stop hook: resume a ultima mensagem do assistente focada em TTS (Ollama) e fala via `say`.
+"""Stop hook: summarize the agent's last message for TTS (via Ollama) and speak it.
 
-Recebe o JSON do Stop hook no stdin (campo transcript_path).
-So roda se ~/.claude/tts-enabled existir (controlado pelo /tts).
+Reads the Stop hook JSON from stdin (transcript_path + session_id).
+Only runs if ~/.claude/tts-enabled-<session_id> exists (controlled by /jarvis).
 """
 import json
 import os
@@ -14,21 +14,51 @@ HOME = os.path.expanduser("~")
 HOOKS = os.path.join(HOME, ".claude", "hooks")
 LOG = os.path.join(HOOKS, "tts.log")
 sys.path.insert(0, HOOKS)
-import tts_engine  # noqa: E402  (camada de fala: say | xtts)
+import tts_engine  # noqa: E402  (speech layer: say | xtts; also resolves language)
 
-# Defaults (sobrescreviveis por env). Voz/motor de fala ficam no tts_engine.py
 MODEL = os.environ.get("CLAUDE_TTS_MODEL", "llama3.2:3b")
 OLLAMA = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
-SYS_PROMPT = (
-    "Voce resume mensagens para serem FALADAS em voz alta, em portugues do Brasil. "
-    "Receba a ultima mensagem de um assistente de programacao e produza um resumo curto e natural, "
-    "como se estivesse contando pra alguem o que aconteceu. Regras: no maximo 2 frases curtas; "
-    "sem markdown, sem codigo, sem listas, sem URLs, sem nomes de arquivo longos, sem emojis; "
-    "foque no que foi feito, concluido ou no que a pessoa precisa decidir. "
-    "Se a mensagem for trivial (so um 'ok'/cumprimento), devolva uma unica frase curta. "
-    "Responda APENAS com o resumo, nada mais."
-)
+# Speech-focused summary prompts per language. The summary is written in the
+# selected language so the TTS voice and the text always match.
+PROMPTS = {
+    "pt": {
+        "sys": (
+            "Voce resume mensagens para serem FALADAS em voz alta, em portugues do Brasil. "
+            "Receba a ultima mensagem de um assistente de programacao e produza um resumo curto e natural, "
+            "como se estivesse contando pra alguem o que aconteceu. Regras: no maximo 2 frases curtas; "
+            "sem markdown, sem codigo, sem listas, sem URLs, sem nomes de arquivo longos, sem emojis; "
+            "foque no que foi feito, concluido ou no que a pessoa precisa decidir. "
+            "Se a mensagem for trivial (so um 'ok'/cumprimento), devolva uma unica frase curta. "
+            "Responda APENAS com o resumo, nada mais."
+        ),
+        "user": "Mensagem do assistente:\n\n{text}\n\nResumo falado:",
+    },
+    "en": {
+        "sys": (
+            "You summarize messages to be SPOKEN out loud, in English. "
+            "Take the last message from a coding assistant and produce a short, natural summary, "
+            "as if telling someone what just happened. Rules: at most 2 short sentences; "
+            "no markdown, no code, no lists, no URLs, no long file names, no emojis; "
+            "focus on what was done, finished, or what the person needs to decide. "
+            "If the message is trivial (just an 'ok'/greeting), return a single short sentence. "
+            "Reply with the summary ONLY, nothing else."
+        ),
+        "user": "Assistant message:\n\n{text}\n\nSpoken summary:",
+    },
+    "es": {
+        "sys": (
+            "Resumes mensajes para ser LEIDOS en voz alta, en espanol. "
+            "Toma el ultimo mensaje de un asistente de programacion y produce un resumen corto y natural, "
+            "como si le contaras a alguien lo que paso. Reglas: maximo 2 frases cortas; "
+            "sin markdown, sin codigo, sin listas, sin URLs, sin nombres de archivo largos, sin emojis; "
+            "enfocate en lo que se hizo, se termino o lo que la persona debe decidir. "
+            "Si el mensaje es trivial (solo un 'ok'/saludo), devuelve una sola frase corta. "
+            "Responde SOLO con el resumen, nada mas."
+        ),
+        "user": "Mensaje del asistente:\n\n{text}\n\nResumen hablado:",
+    },
+}
 
 
 def log(msg):
@@ -40,7 +70,7 @@ def log(msg):
 
 
 def last_assistant_text(transcript_path):
-    """Pega o texto da ultima mensagem do assistente que contem bloco de texto."""
+    """Return the text of the last assistant message that contains a text block."""
     text = None
     try:
         with open(transcript_path) as f:
@@ -61,33 +91,99 @@ def last_assistant_text(transcript_path):
                 if joined:
                     text = joined
     except Exception as e:
-        log(f"erro lendo transcript: {e}")
+        log(f"error reading transcript: {e}")
     return text
 
 
 def clean_for_llm(text):
-    """Tira blocos de codigo grandes pra nao poluir o resumo."""
-    text = re.sub(r"```.*?```", " (trecho de codigo) ", text, flags=re.DOTALL)
+    """Strip large code blocks so they don't pollute the summary."""
+    text = re.sub(r"```.*?```", " (code snippet) ", text, flags=re.DOTALL)
     text = re.sub(r"`[^`]+`", lambda m: m.group(0).strip("`"), text)
     return text.strip()[:4000]
 
 
-def summarize(text):
-    payload = {
-        "model": MODEL,
-        "prompt": f"Mensagem do assistente:\n\n{text}\n\nResumo falado:",
-        "system": SYS_PROMPT,
-        "stream": False,
-        "options": {"temperature": 0.3, "num_predict": 120},
-    }
-    req = urllib.request.Request(
-        f"{OLLAMA}/api/generate",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        out = json.loads(r.read().decode())
+def backend():
+    """Which summarizer to use: ollama (default) | local | openai | gemini | anthropic."""
+    return os.environ.get("CLAUDE_TTS_SUMMARY") or tts_engine._cfg("SUMMARY", "ollama")
+
+
+def model_for(default):
+    return os.environ.get("CLAUDE_TTS_SUMMARY_MODEL") or tts_engine._cfg("SUMMARY_MODEL", "") or default
+
+
+def _post(url, payload, headers, timeout=60):
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json", **headers})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+# --- provider implementations (cloud ones are pure HTTP, no SDK/dependency) ---
+
+def _ollama(sys_p, user_p):
+    out = _post(f"{OLLAMA}/api/generate", {
+        "model": MODEL, "system": sys_p, "prompt": user_p,
+        "stream": False, "options": {"temperature": 0.3, "num_predict": 120},
+    }, {})
     return out.get("response", "").strip()
+
+
+_LLM = None  # cached in-process tiny model (one process = one Stop hook invocation)
+
+def _local(sys_p, user_p):
+    """Tiny in-process model via llama-cpp-python — for machines without Ollama. CPU-friendly."""
+    global _LLM
+    from llama_cpp import Llama
+    if _LLM is None:
+        # Qwen2.5-1.5B-Instruct: best quality/speed balance for short summaries on CPU.
+        # For very modest machines, set a smaller one: /jarvis model Qwen/Qwen2.5-0.5B-Instruct-GGUF
+        repo = model_for("Qwen/Qwen2.5-1.5B-Instruct-GGUF")
+        _LLM = Llama.from_pretrained(repo_id=repo, filename="*q4_k_m.gguf",
+                                     n_ctx=4096, n_threads=os.cpu_count(), verbose=False)
+    r = _LLM.create_chat_completion(
+        messages=[{"role": "system", "content": sys_p}, {"role": "user", "content": user_p}],
+        max_tokens=120, temperature=0.3)
+    return r["choices"][0]["message"]["content"].strip()
+
+
+def _openai(sys_p, user_p):
+    key = os.environ["OPENAI_API_KEY"]
+    out = _post("https://api.openai.com/v1/chat/completions", {
+        "model": model_for("gpt-4o-mini"),
+        "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": user_p}],
+        "max_tokens": 120, "temperature": 0.3,
+    }, {"Authorization": f"Bearer {key}"})
+    return out["choices"][0]["message"]["content"].strip()
+
+
+def _gemini(sys_p, user_p):
+    key = os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"]
+    m = model_for("gemini-2.0-flash")
+    out = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}", {
+        "systemInstruction": {"parts": [{"text": sys_p}]},
+        "contents": [{"role": "user", "parts": [{"text": user_p}]}],
+        "generationConfig": {"maxOutputTokens": 120, "temperature": 0.3},
+    }, {})
+    return out["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+
+def _anthropic(sys_p, user_p):
+    key = os.environ["ANTHROPIC_API_KEY"]
+    out = _post("https://api.anthropic.com/v1/messages", {
+        "model": model_for("claude-haiku-4-5"), "max_tokens": 120,
+        "system": sys_p, "messages": [{"role": "user", "content": user_p}],
+    }, {"x-api-key": key, "anthropic-version": "2023-06-01"})
+    return "".join(b.get("text", "") for b in out.get("content", []) if b.get("type") == "text").strip()
+
+
+PROVIDERS = {"ollama": _ollama, "local": _local, "openai": _openai,
+             "gemini": _gemini, "anthropic": _anthropic}
+
+
+def summarize(text):
+    p = PROMPTS.get(tts_engine.language(), PROMPTS["pt"])
+    fn = PROVIDERS.get(backend(), _ollama)
+    return fn(p["sys"], p["user"].format(text=text))
 
 
 def clean_for_speech(text):
@@ -102,13 +198,13 @@ def main():
         data = json.load(sys.stdin)
     except Exception:
         return
-    # estado POR SESSAO: so fala se ~/.claude/tts-enabled-<session_id> existir
+    # PER-SESSION state: only speak if ~/.claude/tts-enabled-<session_id> exists
     sid = data.get("session_id") or os.environ.get("CLAUDE_CODE_SESSION_ID") or "default"
     if not os.path.exists(os.path.join(HOME, ".claude", f"tts-enabled-{sid}")):
         return
     tp = data.get("transcript_path")
     if not tp or not os.path.exists(tp):
-        log("sem transcript_path")
+        log("no transcript_path")
         return
 
     text = last_assistant_text(tp)
@@ -118,14 +214,14 @@ def main():
     try:
         summary = summarize(clean_for_llm(text))
     except Exception as e:
-        log(f"erro ollama: {e}")
+        log(f"ollama error: {e}")
         return
 
     summary = clean_for_speech(summary)
     if not summary:
         return
 
-    log(f"FALANDO ({tts_engine.engine()}): {summary}")
+    log(f"SPEAKING ({backend()}->{tts_engine.engine()}/{tts_engine.language()}): {summary}")
     tts_engine.speak(summary)
 
 

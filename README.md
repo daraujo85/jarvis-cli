@@ -39,12 +39,38 @@ agent finishes responding
      └─ xtts  (Coqui XTTS-v2, realistic neural voice, via a local server)
 ```
 
-Two voice engines — you choose:
+### Two independent layers — mix freely
+
+JARVIS has **two swappable layers**, and you can combine them in any way — strong machine vs. modest, online vs. fully offline:
+
+- **Summary backend** — *what writes the summary.*
+- **Voice engine** — *what speaks it.*
+
+| Layer | Options |
+|---|---|
+| **Summary** | `ollama` (local, CPU **or** GPU) · `local` (tiny in-process model, CPU-only, no Ollama needed) · `openai` · `gemini` · `anthropic` (your API key) |
+| **Voice** | `say` (native macOS, instant, robotic) · `xtts` (Coqui XTTS-v2, neural, realistic) |
+
+Example combos: a beefy Mac → `summary ollama` + `engine xtts`; a modest laptop → `summary local` + `engine say`; no local horsepower at all → `summary anthropic`/`openai`/`gemini` + `engine say`.
+
+#### Voice engines
 
 | Engine | Realism | Speed | Cost |
 |---|---|---|---|
 | `say` | low (robotic) | instant | none (native macOS) |
 | `xtts` | **high (neural)** | ~5–10s/sentence | ~3 GB disk + ~1.2 GB RAM |
+
+#### Summary backends
+
+| Backend | Where it runs | Needs |
+|---|---|---|
+| `ollama` (default) | local (CPU/GPU) | [Ollama](https://ollama.com) + a model (`llama3.2:3b` default) |
+| `local` | local, in-process, CPU | `pip install llama-cpp-python` (install with `--with-local`); pulls a tiny GGUF (Qwen2.5-1.5B-Instruct by default) on first use |
+| `openai` | cloud | `OPENAI_API_KEY` (default model `gpt-4o-mini`) |
+| `gemini` | cloud | `GEMINI_API_KEY` (default `gemini-2.0-flash`) |
+| `anthropic` | cloud | `ANTHROPIC_API_KEY` (default `claude-haiku-4-5`) |
+
+> The `local` backend is for machines without Ollama — a small model that "gets the job done" on CPU. Override the model with `/jarvis model <hf-repo>` (e.g. `Qwen/Qwen2.5-0.5B-Instruct-GGUF` for very modest machines). Cloud backends use **plain HTTPS** — no SDK dependency.
 
 The `xtts` engine runs a **local server** that loads the model **once** and keeps it in memory — otherwise every utterance would reload the model (~10–30s). If the server is cold or down, JARVIS **automatically falls back** to `say` and boots the server in the background, so it **never blocks and never goes silent**.
 
@@ -113,8 +139,19 @@ Control is through the **`/jarvis` command** (with `/tts` kept as an alias), and
 | `/jarvis test` | play a test clip |
 | `/jarvis engine say` | use the native macOS voice |
 | `/jarvis engine xtts` | use the neural voice (local server) |
+| `/jarvis language pt` / `en` / `es` | switch language (summary text **and** voice) |
+| `/jarvis summary ollama` / `local` / `openai` / `gemini` / `anthropic` | switch the summary backend |
+| `/jarvis model <id>` | override the summary model (provider-specific) |
+| `/jarvis device cpu` / `mps` | XTTS compute device — **CPU is the default** (faster on Apple Silicon); `mps` (GPU) is opt-in |
 
 > `/tts` is a built-in alias for `/jarvis` — same behavior, type whichever you prefer.
+
+### Language
+
+`/jarvis language pt|en|es` flips **both layers at once**: the summary is written in that
+language *and* the voice matches it (macOS `say` voice per language; XTTS picks the language
+per request, so it switches with no server restart). Default is `pt` (Brazilian Portuguese).
+Stored in `~/.claude/tts-config` (`LANG=`); override per-process with `CLAUDE_TTS_LANG`.
 
 ---
 
@@ -122,7 +159,10 @@ Control is through the **`/jarvis` command** (with `/tts` kept as an alias), and
 
 | Variable | Default | What |
 |---|---|---|
+| `CLAUDE_TTS_SUMMARY` | (reads `tts-config`, default `ollama`) | `ollama` / `local` / `openai` / `gemini` / `anthropic` |
+| `CLAUDE_TTS_SUMMARY_MODEL` | per-backend default | override the summary model id |
 | `CLAUDE_TTS_MODEL` | `llama3.2:3b` | Ollama model used for the summary |
+| `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | — | key for the matching cloud summary backend |
 | `CLAUDE_TTS_ENGINE` | (reads `~/.claude/tts-config`) | `say` or `xtts` |
 | `CLAUDE_TTS_VOICE` | `Luciana` | `say` voice (see `say -v '?'`) |
 | `CLAUDE_TTS_SPEAKER` | `Ana Florence` | built-in XTTS speaker |

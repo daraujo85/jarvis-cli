@@ -14,7 +14,13 @@ HOOKS="$CLAUDE/hooks"
 CMDS="$CLAUDE/commands"
 SETTINGS="$CLAUDE/settings.json"
 WITH_XTTS=0
-[ "${1:-}" = "--with-xtts" ] && WITH_XTTS=1
+WITH_LOCAL=0
+for arg in "$@"; do
+  case "$arg" in
+    --with-xtts)  WITH_XTTS=1 ;;
+    --with-local) WITH_LOCAL=1 ;;
+  esac
+done
 
 echo "==> JARVIS-CLI: installing into $CLAUDE"
 mkdir -p "$HOOKS" "$CMDS"
@@ -48,9 +54,9 @@ else:
     print("   Stop hook already registered")
 PY
 
-# --- default engine ---
+# --- default config (engine + language) ---
 if [ ! -f "$CLAUDE/tts-config" ]; then
-  echo "ENGINE=say" > "$CLAUDE/tts-config"
+  printf 'ENGINE=say\nLANG=pt\n' > "$CLAUDE/tts-config"
 fi
 
 # --- check Ollama (speech-focused summary) ---
@@ -61,6 +67,15 @@ if command -v ollama >/dev/null 2>&1; then
   fi
 else
   echo "!! Ollama not found. Install it from https://ollama.com and run: ollama pull llama3.2:3b"
+fi
+
+# --- optional local summary model (llama-cpp, for machines without Ollama) ---
+if [ "${WITH_LOCAL:-0}" = "1" ]; then
+  echo "==> setting up the local summary model (llama-cpp-python)..."
+  [ -d "$HOOKS/tts-venv" ] || python3 -m venv "$HOOKS/tts-venv"
+  "$HOOKS/tts-venv/bin/pip" install --quiet "llama-cpp-python" huggingface_hub
+  printf 'SUMMARY=local\n' >> "$CLAUDE/tts-config"
+  echo "   local summary ready. The GGUF model downloads on first use."
 fi
 
 # --- optional XTTS engine ---

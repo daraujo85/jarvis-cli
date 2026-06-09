@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Camada de fala: escolhe o motor TTS e fala o texto.
+"""Speech layer: pick the TTS engine and speak the text.
 
-Motores:
-  say  -> macOS nativo (rapido, sempre disponivel)
-  xtts -> Coqui XTTS-v2 via servidor local (realista, pesado). Fallback pra `say`
-          se o servidor ainda nao estiver pronto (ele sobe em background).
+Engines:
+  say  -> native macOS (fast, always available)
+  xtts -> Coqui XTTS-v2 via a local server (realistic, heavy). Falls back to `say`
+          if the server isn't ready yet (it boots in the background).
 
-Motor lido de ~/.claude/tts-config (ENGINE=...), default xtts.
-Uso direto: python tts_engine.py "texto a falar"
+Engine and language come from ~/.claude/tts-config (ENGINE=..., LANG=...);
+env vars (CLAUDE_TTS_ENGINE / CLAUDE_TTS_LANG / CLAUDE_TTS_VOICE) override them.
+Direct use: python tts_engine.py "text to speak"
 """
+import json
 import os
 import subprocess
 import urllib.request
@@ -17,41 +19,49 @@ HOME = os.path.expanduser("~")
 HOOKS = os.path.join(HOME, ".claude", "hooks")
 CONFIG = os.path.join(HOME, ".claude", "tts-config")
 
-VOICE = os.environ.get("CLAUDE_TTS_VOICE", "Luciana")
 RATE = os.environ.get("CLAUDE_TTS_RATE", "195")
 PORT = os.environ.get("CLAUDE_TTS_PORT", "5111")
 
+# Default native macOS `say` voice per language (override with CLAUDE_TTS_VOICE).
+SAY_VOICE = {"pt": "Luciana", "en": "Samantha", "es": "Mónica"}
 
-def engine():
-    if os.environ.get("CLAUDE_TTS_ENGINE"):
-        return os.environ["CLAUDE_TTS_ENGINE"]
+
+def _cfg(key, default=""):
     try:
         for line in open(CONFIG):
-            if line.startswith("ENGINE="):
+            if line.startswith(key + "="):
                 return line.strip().split("=", 1)[1]
     except OSError:
         pass
-    return "xtts"
+    return default
+
+
+def engine():
+    return os.environ.get("CLAUDE_TTS_ENGINE") or _cfg("ENGINE", "xtts")
+
+
+def language():
+    return os.environ.get("CLAUDE_TTS_LANG") or _cfg("LANG", "pt")
 
 
 def say(text):
-    subprocess.run(["killall", "say"], stderr=subprocess.DEVNULL)
-    subprocess.run(["say", "-v", VOICE, "-r", RATE, text])
+    voice = os.environ.get("CLAUDE_TTS_VOICE") or SAY_VOICE.get(language(), "Luciana")
+    subprocess.run(["killall", "say"], stderr=subprocess.DEVNULL)  # interrupt previous audio
+    subprocess.run(["say", "-v", voice, "-r", RATE, text])
 
 
 def xtts(text):
-    """Manda pro servidor. Se nao estiver pronto, sobe em background e usa `say` desta vez."""
-    url = f"http://127.0.0.1:{PORT}"
+    """Send to the server. If it isn't ready, boot it and use `say` for this turn."""
+    url = f"http://127.0.0.1:{PORT}/speak"
     try:
         req = urllib.request.Request(
-            url + "/speak",
-            data=__import__("json").dumps({"text": text}).encode(),
+            url,
+            data=json.dumps({"text": text, "lang": language()}).encode(),
             headers={"Content-Type": "application/json"},
         )
-        urllib.request.urlopen(req, timeout=120)  # servidor sintetiza + toca
+        urllib.request.urlopen(req, timeout=120)  # server synthesizes + plays
         return
     except Exception:
-        # servidor fora/aquecendo: dispara o launcher e fala com say por enquanto
         subprocess.Popen(["/bin/bash", os.path.join(HOOKS, "xtts-server.sh")],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         say(text)
@@ -61,10 +71,7 @@ def speak(text):
     text = (text or "").strip()
     if not text:
         return
-    if engine() == "say":
-        say(text)
-    else:
-        xtts(text)
+    (say if engine() == "say" else xtts)(text)
 
 
 if __name__ == "__main__":
