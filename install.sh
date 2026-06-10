@@ -28,7 +28,12 @@ mkdir -p "$HOOKS" "$CMDS"
 cp "$HERE"/hooks/* "$HOOKS"/
 cp "$HERE"/commands/*.md "$CMDS"/   # /jarvis (primary) + /tts (alias)
 chmod +x "$HOOKS"/tts-summary.sh "$HOOKS"/tts-summary.py "$HOOKS"/tts_engine.py \
-         "$HOOKS"/tts-toggle.sh "$HOOKS"/xtts_server.py "$HOOKS"/xtts-server.sh
+         "$HOOKS"/tts-toggle.sh "$HOOKS"/xtts_server.py "$HOOKS"/xtts-server.sh \
+         "$HOOKS"/webhook.py
+
+# away-mode webhook templates (samples; copied, never overwriting a user's own)
+mkdir -p "$CLAUDE/jarvis-webhook-examples"
+cp "$HERE"/examples/*.json "$CLAUDE/jarvis-webhook-examples"/ 2>/dev/null || true
 
 # --- register the Stop hook in settings.json (idempotent, preserves the rest) ---
 HOOK_CMD="$HOOKS/tts-summary.sh"
@@ -93,3 +98,10 @@ echo "==> Installed! Open a NEW Claude Code session (or 'claude --continue') and
 echo "      /jarvis on          enable in this session"
 echo "      /jarvis test        play a test clip"
 echo "      /jarvis engine xtts (if installed with --with-xtts) switch to the neural voice"
+echo
+echo "    Away mode (notify on your phone instead of speaking here):"
+echo "      cp ~/.claude/jarvis-webhook-examples/jarvis-webhook.whatsapp.json ~/.claude/jarvis-webhook.json"
+echo "      # edit it: set your endpoint + secrets (e.g. JARVIS_WPP_PHONE)"
+echo "      /jarvis away test   send a test message via the webhook"
+echo "      /jarvis away on     route audio to the webhook for this session"
+echo "      (ogg/opus voice messages need ffmpeg: brew install ffmpeg)"

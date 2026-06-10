@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Generic multipart/form-data upload — for APIs that want a real file part",
+    "(Content-Disposition with a filename) instead of base64 in JSON.",
+    "Set \"multipart\": true and give the file field the value \"@{{audio_path}}\".",
+    "Any other string field is sent as a plain form field; ${ENV} and {{text}} work too."
+  ],
+  "method": "POST",
+  "url": "https://api.example.com/v1/messages",
+  "headers": { "Authorization": "Bearer ${MY_API_TOKEN}" },
+  "audio_format": "mp3",
+  "filename": "jarvis.mp3",
+  "secrets_env": "~/.claude/secrets/jarvis-webhook.env",
+  "multipart": true,
+  "body": {
+    "to": "${MY_RECIPIENT}",
+    "caption": "{{text}}",
+    "audio": "@{{audio_path}}"
+  }
+}

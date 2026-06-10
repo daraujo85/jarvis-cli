@@ -184,6 +184,26 @@ def clean_for_speech(text):
     return text
 
 
+def session_label(data, sid):
+    """A short spoken name so you can tell WHICH session produced the audio.
+
+    Priority: a custom name set via `/jarvis name <x>` (file tts-name-<sid>),
+    else the project folder name (cwd), else the first chunk of the session id.
+    """
+    f = os.path.join(HOME, ".claude", f"tts-name-{sid}")
+    try:
+        custom = open(f).read().strip()
+        if custom:
+            return custom
+    except OSError:
+        pass
+    cwd = data.get("cwd") or ""
+    base = os.path.basename(cwd.rstrip("/"))
+    if base:
+        return base
+    return sid.split("-")[0]
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -210,7 +230,27 @@ def main():
     if not summary:
         return
 
-    tts_engine.speak(summary)
+    # Prefix the session name so multiple sessions are distinguishable by ear
+    # (and so you know WHICH project the away-mode message came from).
+    # The period gives the TTS a natural pause between name and content.
+    label = session_label(data, sid)
+    spoken = f"{label}. {summary}" if label else summary
+
+    # AWAY MODE: don't play locally — ship the audio to the configured webhook
+    # (e.g. a WhatsApp voice message). The flag is GLOBAL (~/.claude/tts-away):
+    # "I'm not at the computer" applies to every session at once. A legacy
+    # per-session flag (tts-away-<sid>) is still honored if present.
+    if (os.path.exists(os.path.join(HOME, ".claude", "tts-away"))
+            or os.path.exists(os.path.join(HOME, ".claude", f"tts-away-{sid}"))):
+        import webhook  # noqa: E402  (lazy: only needed in away mode)
+        try:
+            webhook.send(webhook.load_template(), spoken)
+        except Exception:
+            # if delivery fails, fall back to local playback so we never go silent
+            tts_engine.speak(spoken)
+        return
+
+    tts_engine.speak(spoken)
 
 
 if __name__ == "__main__":

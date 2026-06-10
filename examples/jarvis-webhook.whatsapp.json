@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Away-mode webhook template. Copy to ~/.claude/jarvis-webhook.json (or point at it with",
+    "`/jarvis webhook <path>`). When `/jarvis away on` is set, JARVIS synthesizes the summary,",
+    "converts it to `audio_format`, and fires THIS request with the placeholders filled in.",
+    "",
+    "Placeholders you can use anywhere in url/headers/body:",
+    "  {{audio_base64}}  base64 of the audio (use this for WhatsApp PTT)",
+    "  {{text}}          the spoken summary (nice as a caption)",
+    "  {{filename}}      the file name",
+    "  {{audio_path}}    on-disk path (only for multipart uploads: set \"multipart\": true",
+    "                    and give a field the value \"@{{audio_path}}\")",
+    "  ${ENV_VAR}        any env var; load secrets via \"secrets_env\" below",
+    "",
+    "This example sends a real WhatsApp voice message (PTT) via the same endpoint",
+    "JARVIS already works with. Set JARVIS_WPP_PHONE in the secrets_env file."
+  ],
+  "method": "POST",
+  "url": "https://wpp.boletoazap.dev.br/development/sendPttMessage",
+  "headers": { "Content-Type": "application/json" },
+  "audio_format": "ogg",
+  "filename": "jarvis.ogg",
+  "secrets_env": "~/.claude/secrets/whatsapp.env",
+  "body": {
+    "phoneNumber": "${JARVIS_WPP_PHONE}",
+    "base64": "{{audio_base64}}",
+    "filename": "{{filename}}",
+    "caption": "{{text}}",
+    "viewOnce": false
+  }
+}

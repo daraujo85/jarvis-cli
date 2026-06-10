@@ -13,6 +13,7 @@ Direct use: python tts_engine.py "text to speak"
 import json
 import os
 import subprocess
+import tempfile
 import urllib.request
 
 HOME = os.path.expanduser("~")
@@ -72,6 +73,42 @@ def speak(text):
     if not text:
         return
     (say if engine() == "say" else xtts)(text)
+
+
+def _say_to_file(text):
+    """Render with the native macOS `say` voice to a temp AIFF (no playback)."""
+    voice = os.environ.get("CLAUDE_TTS_VOICE") or SAY_VOICE.get(language(), "Luciana")
+    out = tempfile.mktemp(suffix=".aiff")
+    subprocess.run(["say", "-v", voice, "-r", RATE, "-o", out, text])
+    return out
+
+
+def _xtts_to_file(text):
+    """Ask the XTTS server to synthesize to a WAV and return its path.
+    Falls back to `say` if the server isn't up yet (and boots it for next time)."""
+    url = f"http://127.0.0.1:{PORT}/synth"
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps({"text": text, "lang": language()}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read().decode())["path"]
+    except Exception:
+        subprocess.Popen(["/bin/bash", os.path.join(HOOKS, "xtts-server.sh")],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return _say_to_file(text)
+
+
+def synth_file(text):
+    """Synthesize `text` to an audio file WITHOUT playing it; return the path
+    (or None). Used by away-mode to ship the audio to a webhook. The caller
+    owns the file and should delete it when done."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    return _say_to_file(text) if engine() == "say" else _xtts_to_file(text)
 
 
 if __name__ == "__main__":

@@ -6,10 +6,11 @@ CLAUDE="$HOME/.claude"; HOOKS="$CLAUDE/hooks"
 pkill -f xtts_server.py 2>/dev/null || true
 rm -f "$HOOKS"/tts-summary.sh "$HOOKS"/tts-summary.py "$HOOKS"/tts_engine.py \
       "$HOOKS"/tts-toggle.sh "$HOOKS"/xtts_server.py "$HOOKS"/xtts-server.sh \
-      "$HOOKS"/tts.log "$HOOKS"/xtts-server.log
-rm -rf "$HOOKS/tts-venv"
+      "$HOOKS"/webhook.py "$HOOKS"/tts.log "$HOOKS"/xtts-server.log
+rm -rf "$HOOKS/tts-venv" "$CLAUDE/jarvis-webhook-examples"
 rm -f "$CLAUDE"/tts-config "$CLAUDE"/commands/jarvis.md "$CLAUDE"/commands/tts.md
-rm -f "$CLAUDE"/tts-enabled-* "$CLAUDE"/tts-enabled 2>/dev/null || true
+rm -f "$CLAUDE"/tts-enabled-* "$CLAUDE"/tts-enabled "$CLAUDE"/tts-away-* 2>/dev/null || true
+# NOTE: ~/.claude/jarvis-webhook.json (your own template) is left untouched.
 
 python3 - "$CLAUDE/settings.json" <<'PY'
 import json, os, sys
