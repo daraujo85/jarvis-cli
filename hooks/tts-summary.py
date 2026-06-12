@@ -209,9 +209,11 @@ def main():
         data = json.load(sys.stdin)
     except Exception:
         return
-    # PER-SESSION state: only speak if ~/.claude/tts-enabled-<session_id> exists
+    # ENABLE check: speak if THIS session is on (~/.claude/tts-enabled-<session_id>)
+    # OR the GLOBAL "all sessions" flag is set (~/.claude/tts-enabled-all, via /jarvis all on).
     sid = data.get("session_id") or os.environ.get("CLAUDE_CODE_SESSION_ID") or "default"
-    if not os.path.exists(os.path.join(HOME, ".claude", f"tts-enabled-{sid}")):
+    if not (os.path.exists(os.path.join(HOME, ".claude", f"tts-enabled-{sid}"))
+            or os.path.exists(os.path.join(HOME, ".claude", "tts-enabled-all"))):
         return
     tp = data.get("transcript_path")
     if not tp or not os.path.exists(tp):

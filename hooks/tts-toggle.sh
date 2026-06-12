@@ -1,17 +1,19 @@
 #!/bin/bash
 # Enable/disable/inspect JARVIS voice readback. Used by the /jarvis (and /tts) command.
 # State is PER SESSION: each Claude Code terminal/session has its own flag.
-# Usage: tts-toggle.sh [on|off|status|test|name <x>|engine <say|xtts>|language <pt|en|es>|away <on|off|test>|webhook <path>]
+# Usage: tts-toggle.sh [on|off|all <on|off>|status|test|name <x>|engine <say|xtts>|language <pt|en|es>|away <on|off|test>|webhook <path>]
 
 SID="${CLAUDE_CODE_SESSION_ID:-default}"
 FLAG="$HOME/.claude/tts-enabled-$SID"
+ALL_FLAG="$HOME/.claude/tts-enabled-all"  # GLOBAL: enables readback for EVERY session at once
 AWAY_FLAG="$HOME/.claude/tts-away"   # GLOBAL: away applies to every session at once
 NAME="$HOME/.claude/tts-name-$SID"
 CONFIG="$HOME/.claude/tts-config"
 ACTION="${1:-toggle}"
 PY="$HOME/.claude/hooks/tts-venv/bin/python"; [ -x "$PY" ] || PY="python3"  # webhook.py is stdlib-only
 
-state()      { [ -f "$FLAG" ] && echo "ON" || echo "OFF"; }
+state()      { { [ -f "$FLAG" ] || [ -f "$ALL_FLAG" ]; } && echo "ON" || echo "OFF"; }
+all_state()  { [ -f "$ALL_FLAG" ] && echo "ON" || echo "OFF"; }
 away_state() { [ -f "$AWAY_FLAG" ] && echo "ON" || echo "OFF"; }
 get_cfg() { grep -E "^$1=" "$CONFIG" 2>/dev/null | tail -1 | cut -d= -f2; }
 set_cfg() {  # set KEY=VALUE preserving the other keys
@@ -24,6 +26,12 @@ case "$ACTION" in
   on)     touch "$FLAG" ;;
   off)    rm -f "$FLAG" ;;
   toggle) if [ -f "$FLAG" ]; then rm -f "$FLAG"; else touch "$FLAG"; fi ;;
+  all)  # enable/disable for EVERY session at once (GLOBAL flag honored by the Stop hook)
+    case "${2:-}" in
+      on)  touch "$ALL_FLAG"; echo "JARVIS (ALL sessions): ON  -> every session reads back, current and future"; exit 0 ;;
+      off) rm -f "$ALL_FLAG" "$HOME"/.claude/tts-enabled-*; echo "JARVIS (ALL sessions): OFF -> cleared the global flag and every per-session flag"; exit 0 ;;
+      *)   echo "JARVIS (ALL sessions): $(all_state)  (use: all on | all off)"; exit 0 ;;
+    esac ;;
   status) ;;
   name)   # spoken name for THIS session, prefixed before each summary
     if [ -n "${2:-}" ]; then
@@ -92,7 +100,7 @@ case "$ACTION" in
       2>/dev/null &
     echo "Playing test clip (engine: $(get_cfg ENGINE), language: $(get_cfg LANG))."
     exit 0 ;;
-  *) echo "usage: on|off|status|test|name <x>|engine <say|xtts>|language <pt|en|es>|summary <ollama|local|openai|gemini|anthropic>|model <id>|device <cpu|mps>|away <on|off|test>|webhook <path>"; exit 1 ;;
+  *) echo "usage: on|off|all <on|off>|status|test|name <x>|engine <say|xtts>|language <pt|en|es>|summary <ollama|local|openai|gemini|anthropic>|model <id>|device <cpu|mps>|away <on|off|test>|webhook <path>"; exit 1 ;;
 esac
 
-echo "JARVIS (this session): $(state)  | away: $(away_state)  | voice: $(get_cfg ENGINE)  | lang: $(get_cfg LANG)  | summary: $(get_cfg SUMMARY)"
+echo "JARVIS (this session): $(state)  | all: $(all_state)  | away: $(away_state)  | voice: $(get_cfg ENGINE)  | lang: $(get_cfg LANG)  | summary: $(get_cfg SUMMARY)"

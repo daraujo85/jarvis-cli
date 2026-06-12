@@ -23,6 +23,7 @@ CWD="$(jq_get '.workspace.current_dir')"; [ -z "$CWD" ] && CWD="$(jq_get '.cwd')
 MODEL="$(jq_get '.model.display_name')"
 
 FLAG="$HOME/.claude/tts-enabled-$SID"
+ALL_FLAG="$HOME/.claude/tts-enabled-all"
 AWAY_FLAG="$HOME/.claude/tts-away"
 NAME_FILE="$HOME/.claude/tts-name-$SID"
 CONFIG="$HOME/.claude/tts-config"
@@ -32,8 +33,10 @@ get_cfg() { grep -E "^$1=" "$CONFIG" 2>/dev/null | tail -1 | cut -d= -f2; }
 DIM='\033[2m'; RST='\033[0m'; GRN='\033[32m'; RED='\033[31m'; YEL='\033[33m'; CYN='\033[36m'; MAG='\033[35m'
 
 # --- JARVIS segment ---
-if [ -f "$FLAG" ]; then
+# "on" if this session is enabled OR the global all-sessions flag is set.
+if [ -f "$FLAG" ] || [ -f "$ALL_FLAG" ]; then
   J="${GRN}●JARVIS on${RST}"
+  [ -f "$ALL_FLAG" ] && J="$J ${YEL}✦all${RST}"
 else
   J="${DIM}○JARVIS off${RST}"
 fi
@@ -41,7 +44,7 @@ if [ -f "$AWAY_FLAG" ]; then
   J="$J ${YEL}✈away${RST}"
 fi
 # voice/lang only matter when on
-if [ -f "$FLAG" ]; then
+if [ -f "$FLAG" ] || [ -f "$ALL_FLAG" ]; then
   ENG="$(get_cfg ENGINE)"; LANG="$(get_cfg LANG)"
   EXTRA=""
   [ -n "$ENG" ]  && EXTRA="$EXTRA ${CYN}${ENG}${RST}"

@@ -135,6 +135,7 @@ Control is through the **`/jarvis` command** (with `/tts` kept as an alias), and
 | Command | Action |
 |---|---|
 | `/jarvis on` / `off` | enable/disable **in this session** |
+| `/jarvis all on` / `off` | enable/disable in **every session at once** (global). `all off` also clears each per-session flag |
 | `/jarvis status` | show state + current engine |
 | `/jarvis test` | play a test clip |
 | `/jarvis engine say` | use the native macOS voice |
