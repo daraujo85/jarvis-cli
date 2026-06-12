@@ -29,7 +29,7 @@ cp "$HERE"/hooks/* "$HOOKS"/
 cp "$HERE"/commands/*.md "$CMDS"/   # /jarvis (primary) + /tts (alias)
 chmod +x "$HOOKS"/tts-summary.sh "$HOOKS"/tts-summary.py "$HOOKS"/tts_engine.py \
          "$HOOKS"/tts-toggle.sh "$HOOKS"/xtts_server.py "$HOOKS"/xtts-server.sh \
-         "$HOOKS"/webhook.py
+         "$HOOKS"/webhook.py "$HOOKS"/jarvis-statusline.sh
 
 # away-mode webhook templates (samples; copied, never overwriting a user's own)
 mkdir -p "$CLAUDE/jarvis-webhook-examples"
@@ -57,6 +57,27 @@ if not already:
     print("   Stop hook registered in settings.json")
 else:
     print("   Stop hook already registered")
+PY
+
+# --- register the statusline (shows JARVIS state in the footer; idempotent) ---
+STATUSLINE_CMD="$HOOKS/jarvis-statusline.sh"
+python3 - "$SETTINGS" "$STATUSLINE_CMD" <<'PY'
+import json, os, sys
+path, cmd = sys.argv[1], sys.argv[2]
+cfg = {}
+if os.path.exists(path):
+    with open(path) as f:
+        cfg = json.load(f)
+sl = cfg.get("statusLine")
+if isinstance(sl, dict) and sl.get("command") == cmd:
+    print("   statusLine already registered")
+elif isinstance(sl, dict) and sl.get("command"):
+    print("   statusLine already set to something else; leaving it (use: %s)" % cmd)
+else:
+    cfg["statusLine"] = {"type": "command", "command": cmd}
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+    print("   statusLine registered in settings.json")
 PY
 
 # --- default config (engine + language) ---

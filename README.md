@@ -149,6 +149,21 @@ Control is through the **`/jarvis` command** (with `/tts` kept as an alias), and
 
 > `/tts` is a built-in alias for `/jarvis` — same behavior, type whichever you prefer.
 
+### 📟 Statusline
+
+The installer also wires a **statusline** into the Claude Code footer so you can see JARVIS state at a glance:
+
+```
+●JARVIS on ✈away xtts es │ jarvis-cli ⎇ master │ Opus 4.8
+```
+
+- `●JARVIS on` (green) / `○JARVIS off` (dim) — the **per-session** on/off flag
+- `✈away` (yellow) — shown only while **away mode** is on (global)
+- engine + language (e.g. `xtts es`) and the session name, shown only when on
+- plus context: folder · git branch · model
+
+It updates on its own as you run `/jarvis on|off|away on|...`. Open a new session (or `claude --continue`) after install for the footer to appear. If you already have a custom `statusLine`, the installer leaves it untouched.
+
 ### 📲 Away mode (notify on your phone instead of speaking here)
 
 When you step away from the keyboard, flip `/jarvis away on`. Instead of playing the summary
