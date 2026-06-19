@@ -113,7 +113,7 @@ def _post(url, payload, headers, timeout=60):
 
 def _ollama(sys_p, user_p):
     out = _post(f"{OLLAMA}/api/generate", {
-        "model": MODEL, "system": sys_p, "prompt": user_p,
+        "model": model_for(MODEL), "system": sys_p, "prompt": user_p,
         "stream": False, "options": {"temperature": 0.3, "num_predict": 120},
     }, {})
     return out.get("response", "").strip()
